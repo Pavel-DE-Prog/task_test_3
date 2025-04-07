@@ -29,7 +29,7 @@ default_args = {
 # Функция для загрузки конфигурации из переменных окружения
 def load_db_config():
     """Загружает конфигурацию подключения к базам данных из JSON файла."""
-    config_path = '/opt/airflow/dags/db_config.json'
+    config_path = os.path.join(os.path.dirname(__file__), 'db_config.json')
     with open(config_path) as f:
         config = json.load(f)
 

@@ -1,1 +1,9 @@
-
+db_config.json
+{
+    "projects": {
+        "project_a": "PROJECT_A_CONN",
+        "project_b": "PROJECT_B_CONN",
+        "project_c": "PROJECT_C_CONN"
+    },
+    "analytics": "ANALYTICS_DB_CONN"
+}

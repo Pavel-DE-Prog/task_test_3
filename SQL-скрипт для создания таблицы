@@ -1,0 +1,29 @@
+CREATE TABLE IF NOT EXISTS analytics_sessions (
+    id SERIAL PRIMARY KEY,  -- Уникальный идентификатор сессии
+    user_id BIGINT NOT NULL,  -- ID пользователя
+    active BOOLEAN NOT NULL DEFAULT TRUE,  -- Статус активности сессии
+    page_name VARCHAR(255),  -- Название страницы
+    last_activity_at TIMESTAMP,  -- Время последней активности
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- Время создания записи
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,  -- Время последнего обновления
+    project VARCHAR(255),  -- Название проекта
+    events_count INTEGER,  -- Количество событий в сессии
+    transactions_sum NUMERIC(10, 2),  -- Сумма транзакций
+    first_successful_transaction_time TIMESTAMP,  -- Время первой успешной транзакции
+    first_successful_transaction_usd NUMERIC(10, 2)  -- Сумма первой успешной транзакции в USD
+);
+
+
+Пояснения к структуре таблицы:
+id: Уникальный идентификатор для каждой сессии, используется тип SERIAL.
+user_id: Идентификатор пользователя, типа BIGINT.
+active: Логическое поле, показывающее, активна ли сессия.
+page_name: Название страницы, на которую попал пользователь.
+last_activity_at: Время последней активности пользователя на сайте.
+created_at: Дата и время создания записи, по умолчанию устанавливается текущее время.
+updated_at: Дата и время последнего обновления записи.
+project: Название проекта, к которому относится сессия.
+events_count: Общее количество событий в сессии.
+transactions_sum: Общая сумма транзакций, произведенных в рамках сессии.
+first_successful_transaction_time: Время первой успешной транзакции.
+first_successful_transaction_usd: Сумма первой успешной транзакции в долларах США.

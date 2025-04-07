@@ -1,0 +1,144 @@
+Документация по настройке Apache Airflow для ETL процессов
+
+1. Настройка Airflow
+
+1.1 Установка Airflow
+Для установки Apache Airflow следуйте приведенным ниже шагам:
+Установка зависимостей:
+Убедитесь, что у вас установлён Python версии 3.6 или выше, а также pip.
+pip install apache-airflow psycopg2-binary pandas python-dotenv
+
+Не забудьте установить зависимости для работы с подключениями к базам данных, например для PostgreSQL:
+pip install apache-airflow-providers-postgres
+
+Инициализация Airflow:
+Установите переменную окружения для указания домашней директории Airflow и инициализируйте базу данных.
+export AIRFLOW_HOME=~/airflow
+airflow db init
+
+Запуск Airflow:
+Запустите веб-сервер и планировщик Airflow.
+airflow webserver --port 8080
+airflow scheduler
+
+Доступ к интерфейсу Airflow:
+Откройте браузер на http://localhost:8080 для доступа к интерфейсу Airflow.
+
+1.2 Подключение сторонних библиотек
+Используйте файл requirements.txt для управления зависимостями. Пример содержимого файла:
+apache-airflow==2.0.0
+psycopg2-binary
+pandas
+python-dotenv
+Установите библиотеки из файла командой:
+pip install -r requirements.txt
+
+2. Настройка подключений
+2.1 Скрипты для подключения к базам данных
+Создайте JSON-файл db_config.json, который будет содержать информацию о ваших подключениях к базам данных:
+
+{
+    "projects": {
+        "project_a": "PROJECT_A_CONN",
+        "project_b": "PROJECT_B_CONN",
+        "project_c": "PROJECT_C_CONN"
+    },
+    "analytics": "ANALYTICS_DB_CONN"
+}
+
+2.2 Изменение переменных окружения
+В файле .env добавьте следующие строки для определения строк подключения к базам данных:
+PROJECT_A_CONN="postgresql+psycopg2://username_a:password_a@project_a_host/project_a_db"
+PROJECT_B_CONN="postgresql+psycopg2://username_b:password_b@project_b_host/project_b_db"
+PROJECT_C_CONN="postgresql+psycopg2://username_c:password_c@project_c_host/project_c_db"
+ANALYTICS_DB_CONN="postgresql+psycopg2://analytics_user:analytics_password@analytics_host/agg"
+
+2.3 Создание подключений через Airflow CLI
+Вы можете создать подключения с помощью Airflow CLI. Пример создания четырёх подключений:
+
+# Создание подключения к базе данных проекта A
+airflow connections add 'PROJECT_A_CONN' \
+    --conn-type 'Postgres' \
+    --conn-host 'project_a_host' \
+    --conn-schema 'project_a_db' \
+    --conn-login 'username_a' \
+    --conn-password 'password_a' \
+    --conn-port '5432'
+
+# Создание подключения к базе данных проекта B
+airflow connections add 'PROJECT_B_CONN' \
+    --conn-type 'Postgres' \
+    --conn-host 'project_b_host' \
+    --conn-schema 'project_b_db' \
+    --conn-login 'username_b' \
+    --conn-password 'password_b' \
+    --conn-port '5432'
+
+# Создание подключения к базе данных проекта C
+airflow connections add 'PROJECT_C_CONN' \
+    --conn-type 'Postgres' \
+    --conn-host 'project_c_host' \
+    --conn-schema 'project_c_db' \
+    --conn-login 'username_c' \
+    --conn-password 'password_c' \
+    --conn-port '5432'
+
+# Создание подключения к аналитической базе данных
+airflow connections add 'ANALYTICS_DB_CONN' \
+    --conn-type 'Postgres' \
+    --conn-host 'analytics_host' \
+    --conn-schema 'agg' \
+    --conn-login 'analytics_user' \
+    --conn-password 'analytics_password' \
+    --conn-port '5432'
+
+3. Примеры данных и результатов
+Данные, извлекаемые из баз данных проектов, могут выглядеть следующим образом (в формате таблиц):
+user_id	session_id	created_at
+1	101	2023-10-01 12:30:00
+2	102	2023-10-01 12:35:00
+
+Примеры обогащенных данных
+Данные, обогащенные после обработки, могут выглядеть следующим образом:
+[
+    {
+        "user_id": 1,
+        "events_count": 5,
+        "transactions_sum": 150.00,
+        "first_successful_transaction_time": "2023-10-01T12:31:00Z",
+        "first_successful_transaction_usd": 150.00
+    },
+    {
+        "user_id": 2,
+        "events_count": 3,
+        "transactions_sum": 75.00,
+        "first_successful_transaction_time": "2023-10-01T12:40:00Z",
+        "first_successful_transaction_usd": 75.00
+    }
+]
+
+3. Параллелизм
+Для настройки параллелизма в Airflow измените следующие параметры в файле airflow.cfg:
+
+# Увеличьте это значение, чтобы разрешить больше параллельных задач
+parallelism = 32
+
+# Количество одновременных задач внутри одного DAG
+dag_concurrency = 16
+Убедитесь, что ваши ресурсы сервера могут поддерживать нужные значения для избежания нехватки ресурсов.
+
+5. Использование CeleryExecutor
+Если ваши задачи становятся объемными и требуют большей обработочной мощности, вы можете использовать CeleryExecutor.
+Настройка CeleryExecutor
+Установка необходимых зависимостей:
+pip install apache-airflow[celery]
+pip install redis  # Или другой брокер, например, RabbitMQ
+Конфигурация:
+Измените airflow.cfg, чтобы использовать CeleryExecutor:
+executor = CeleryExecutor
+broker_url = redis://localhost:6379/0  # На базе Redis или RabbitMQ
+result_backend = db+postgresql://user:password@localhost/dbname  # Используйте вашу аналитическую базу данных
+Запуск сервисов:
+Запустите воркеры Celery:
+airflow celery worker
+С помощью CeleryExecutor каждая задача может выполняться независимо, что помогает лучше справляться с большими объемами данных, распределяя вычисления по нескольким рабочим процессам.

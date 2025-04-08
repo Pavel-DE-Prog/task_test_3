@@ -6,6 +6,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 import pandas as pd
+from sqlalchemy import create_engine
 from datetime import datetime, timedelta
 
 # Загрузка переменных окружения из .env файла
@@ -20,13 +21,12 @@ default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
     'start_date': datetime(2023, 10, 1),
-    'email_on_failure': True,  # Включаем уведомления об ошибках
+    'email_on_failure': True,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
 }
 
-# Функция для загрузки конфигурации из переменных окружения
 def load_db_config():
     """Загружает конфигурацию подключения к базам данных из JSON файла."""
     config_path = os.path.join(os.path.dirname(__file__), 'db_config.json')
@@ -39,7 +39,6 @@ def load_db_config():
     logger.info("Подключения получены: %s", project_connections)
     return project_connections
 
-# Проверка возможности подключения
 def check_connection(conn_id):
     """Проверяет возможность подключения к базе данных."""
     hook = PostgresHook(postgres_conn_id=conn_id)
@@ -48,9 +47,9 @@ def check_connection(conn_id):
         logger.info("Подключение %s успешно", conn_id)
     except Exception as e:
         logger.error("Ошибка подключения %s: %s", conn_id, e)
+        # Здесь может быть добавлен код для отправки уведомлений
         raise
 
-# Создание таблицы analytics_sessions
 def create_analytics_table():
     """Создает таблицу analytics_sessions в аналитической базе данных."""
     connections = load_db_config()
@@ -80,7 +79,6 @@ def create_analytics_table():
         logger.error("Ошибка при создании таблицы: %s", e)
         raise
 
-# Извлечение и обогащение данных
 def extract_and_enrich_data(conn_id, **kwargs):
     """Извлекает и обогащает данные из базы данных."""
     hook = PostgresHook(postgres_conn_id=conn_id)
@@ -111,7 +109,6 @@ def extract_and_enrich_data(conn_id, **kwargs):
         logger.error("Ошибка при извлечении и обогащении данных: %s", e)
         raise
 
-# Функция загрузки данных
 def load_data(**kwargs):
     """Загружает обогащенные данные в таблицу analytics_sessions."""
     ti = kwargs['ti']
@@ -131,24 +128,20 @@ def load_data(**kwargs):
     hook_analytics = PostgresHook(postgres_conn_id=connections['analytics'])
     engine = hook_analytics.get_sqlalchemy_engine()
 
-    enriched_data_records = df.to_dict(orient='records')
-
-    if not enriched_data_records:
-        logger.info("Нет данных для загрузки")
-        return
-
     try:
-        with engine.connect() as conn:
-            conn.execute(
-                hook_analytics.get_table('analytics_sessions').insert(),
-                enriched_data_records
-            )
+        # Используем pd.DataFrame.to_sql для массовой вставки данных
+        df.to_sql(
+            'analytics_sessions', 
+            con=engine, 
+            if_exists='append', 
+            index=False,
+            chunksize=500  # Настройка размера пакета для вставки
+        )
         logger.info("Успешно загружено %d записей в таблицу analytics_sessions", len(df))
     except Exception as e:
         logger.error("Ошибка загрузки данных: %s", e)
         raise
 
-# Функция для создания задач проверки соединений
 def create_connection_check_tasks():
     """Создает задачи для проверки соединений с базами данных."""
     connections = load_db_config()
@@ -164,18 +157,17 @@ def create_connection_check_tasks():
 
     return tasks
 
-# Функция для создания задач извлечения данных
 def create_extract_tasks():
     """Создает задачи для извлечения данных из баз данных всех проектов."""
     connections = load_db_config()
     tasks = []
 
     for project_name, conn_id in connections.items():
-        if project_name.startswith("project_"):  # Проверяем только проектные подключения
+        if project_name.startswith("project_"):
             task = PythonOperator(
                 task_id=f'extract_data_{project_name}',
                 python_callable=extract_and_enrich_data,
-                op_kwargs={'conn_id': conn_id}  # Передаем id подключения
+                op_kwargs={'conn_id': conn_id}
             )
             tasks.append(task)
 
@@ -190,15 +182,14 @@ with DAG('etl_sessions', default_args=default_args, schedule='*/10 * * * *', cat
 
     connection_checks = create_connection_check_tasks()
 
-    extract_tasks = create_extract_tasks()  # Создаем задачи извлечения
+    extract_tasks = create_extract_tasks()
 
     load_task = PythonOperator(
         task_id='load_data',
         python_callable=load_data
     )
 
-    # Определение порядка выполнения задач
     for connection_check in connection_checks:
         connection_check >> create_table_task
 
-    create_table_task >> extract_tasks >> load_task  # Вызовите все задачи извлечения параллельно
+    create_table_task >> extract_tasks >> load_task
